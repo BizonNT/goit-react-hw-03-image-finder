@@ -1,71 +1,87 @@
 import { Component } from 'react';
-import Section from './Section/Section';
-import FeedbackOptions from './FeedbackOptions/FeedbackOptions';
-import Statistics from './Statistics/Statistics';
-import Notification from './Notification/Notification';
+import Searchbar from './Searchbar/Searchbar';
+import ImageGallery from './ImageGallery/ImageGallery';
+import Button from './Button/Button';
+import Modal from './Modal/Modal';
+
+import getData from 'api/servises';
 
 import css from './app.module.css';
+import Loader from './Loader/Loader';
 
 class App extends Component {
-  static voteOptions = ['good', 'neutral', 'bad'];
-
   state = {
-    good: 0,
-    neutral: 0,
-    bad: 0,
+    searchInput: '',
+    loading: false,
+    error: null,
+    hits: [],
+    currentPage: 1,
+    totalPages: 1,
+    perPage: 12,
+    showModal: false,
+    filter: [],
   };
 
-  makeFirstLetterToUpperCase = value => {
-    return value.toUpperCase().slice(0, 1) + value.slice(1);
-  };
-
-  addVote = keyName => {
-    this.setState(prevState => {
-      return {
-        [keyName]: prevState[keyName] + 1,
-      };
-    });
-  };
-
-  countTotalFeedback = () => {
-    const { good, neutral, bad } = this.state;
-    return good + neutral + bad;
-  };
-
-  countPositiveFeedbackPercentage() {
-    const total = this.countTotalFeedback();
-    if (!total) {
-      return 0;
+  async componentDidUpdate(prevProps, prevState) {
+    const { searchInput, currentPage, perPage, hits } = this.state;
+    if (
+      prevState.searchInput !== searchInput ||
+      prevState.currentPage !== currentPage
+    ) {
+      this.setState({ loading: true });
+      try {
+        const data = await getData(
+          searchInput,
+          currentPage,
+          perPage
+        );
+        this.setState({
+          hits: [...hits, ...data.hits],
+          totalPages: Math.ceil(data.totalHits / perPage),
+        });
+      } catch (error) {
+        this.setState({ error: error.message });
+      } finally {
+        this.setState({ loading: false });
+      }
     }
-    const { good } = this.state;
-    return Number(((good / total) * 100).toFixed(0));
   }
 
+  onHandleSubmit = ({ searchInput }) => {
+    if (
+      (this.state.searchInput !== searchInput) 
+    ) {
+      this.setState({ hits: [], searchInput: searchInput, currentPage: 1 });
+    }
+  };
+
+  onHandleIncrease = () => {
+    this.setState(({ currentPage }) => ({ currentPage: currentPage + 1 }));
+  };
+
+  onHandleClick = event => {
+    const picId = Number(event.target.id);
+    const filter = this.state.hits.filter(hit => hit.id === picId);
+    this.setState({ filter: filter });
+    this.toggleModal();
+  };
+
+  toggleModal = () => {
+    this.setState(({ showModal }) => ({ showModal: !showModal }));
+  };
+
   render() {
-    const { good, neutral, bad } = this.state;
-    const totalVotes = this.countTotalFeedback();
+    const { hits, totalPages, currentPage, loading, showModal, filter } =
+      this.state;
     return (
-      <div className={css.container}>
-        <Section title="Please leave feedback">
-          <FeedbackOptions
-            options={App.voteOptions}
-            addVote={this.addVote}
-            makeFirstLetterToUpperCase={this.makeFirstLetterToUpperCase}
-          />
-        </Section>
-        <Section title="Statistics">
-          {totalVotes > 0 ? (
-            <Statistics
-              good={good}
-              neutral={neutral}
-              bad={bad}
-              total={totalVotes}
-              positivePercentage={this.countPositiveFeedbackPercentage()}
-            />
-          ) : (
-            <Notification message="There is no feedback" />
-          )}
-        </Section>
+      <div className={css.app}>
+        <Searchbar onSubmit={this.onHandleSubmit} />
+        {hits.length !== 0 && (
+          <ImageGallery items={hits} onClick={this.onHandleClick} />
+        )}
+        {totalPages > currentPage && <Button onClick={this.onHandleIncrease} />}
+        {loading && <Loader />}
+        {showModal && <Modal onClose={this.toggleModal} filter={filter} />}
       </div>
     );
   }
